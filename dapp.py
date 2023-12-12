@@ -44,13 +44,13 @@ def getBalance(payload):
         return [{"balance": balance}]
 
 def getAllBets():
-    bets_with_owner_address = []
-    for betOwnerAddress, bets in BETS.items():
+    bets_with_uuid = []
+    for uuid, bets in BETS.items():
         for bet in bets:
             bet_copy = bet.copy()
-            bet_copy['betOwnerAddress'] = betOwnerAddress
-            bets_with_owner_address.append(bet_copy)
-    return bets_with_owner_address
+            bet_copy['uuid'] = uuid
+            bets_with_uuid.append(bet_copy)
+    return bets_with_uuid
 
 
 # Setters _______________________________________________________________
@@ -86,16 +86,18 @@ def create_bet(payload):
     betOwnerAddress = payload["betOwnerAddress"];
     matchId = payload["matchId"];
     betOwnerType = payload["betOwnerType"];
+    uuid = payload["uuid"];
 
     if betOwnerAddress not in BALANCES or BALANCES[betOwnerAddress] < betValue:
         return "reject"
   
     if betOwnerAddress not in BETS:
-        BETS[betOwnerAddress] = []
-    BETS[betOwnerAddress].append({
+        BETS[uuid] = []
+    BETS[uuid].append({
         "matchId": matchId,
         "betValue": betValue,
         "betOwnerType": betOwnerType,
+        "betOwnerAddress": betOwnerAddress
     })
 
     BALANCES[betOwnerAddress] -= betValue
@@ -104,6 +106,37 @@ def create_bet(payload):
     return "accept"
 
 
+def cover_bet(payload):
+    betValue = payload["betValue"];
+    uuid = payload["uuid"];
+    betCoverAddress = payload["betCoverAddress"];
+    betCoverType = payload["betCoverType"];
+    betOwnerAddress = payload["betOwnerAddress"];
+    matchId = payload["matchId"];
+    betOwnerType = payload["betOwnerType"];
+
+    if(BETS.get(uuid) == None):
+        return "reject"
+    
+    if betCoverAddress not in BALANCES or BALANCES[betCoverAddress] < betValue:
+        return "reject"
+    
+    BETS[uuid].pop()
+    BETS[uuid].append({
+        "betValue": betValue,
+        "uuid": uuid,
+        "betCoverAddress": betCoverAddress,
+        "betCoverType": betCoverType,
+        "betOwnerAddress": betOwnerAddress,
+        "matchId": matchId,
+        "betOwnerType": betOwnerType,
+    })
+
+    BALANCES[betCoverAddress] -= betValue
+
+    logger.info(f"Creating bet with payload {payload}")
+    return "accept"
+
 
 # Selectors _____________________________________________________________
 
@@ -111,6 +144,7 @@ def select_function_advance(payload):
     function_id = int(payload["function_id"])
     function_map = {
         1: lambda: create_bet(payload),
+        3: lambda: cover_bet(payload),
     }
 
     function = function_map.get(function_id)
